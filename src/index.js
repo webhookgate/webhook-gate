@@ -1,5 +1,6 @@
 import express from "express";
 import { PORT } from "./config.js";
+import { tryMarkReceived } from "./db.js";
 
 const app = express();
 
@@ -8,6 +9,21 @@ app.use(express.json());
 
 app.get("/health", (_, res) => {
   res.json({ ok: true });
+});
+
+// MVP: send { provider, eventId, payload }
+app.post("/ingest", (req, res) => {
+  const provider = String(req.body?.provider || "");
+  const eventId = String(req.body?.eventId || "");
+
+  if (!provider || !eventId) {
+    return res.status(400).json({ ok: false, error: "provider and eventId are required" });
+  }
+
+  const { firstTime } = tryMarkReceived(provider, eventId);
+
+  // If duplicate, we still return 200 to stop retry storms.
+  return res.status(200).json({ ok: true, firstTime });
 });
 
 app.listen(PORT, () => {
