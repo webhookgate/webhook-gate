@@ -1,5 +1,12 @@
-node_modules/
+# Ignore real env files
 .env
-.env.*
+.env.local
+.env.production
+.env.development
+
+# OS / logs
 .DS_Store
 *.log
+
+# Dependencies
+node_modules/
