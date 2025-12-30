@@ -1,6 +1,12 @@
 import Database from "better-sqlite3";
+import fs from "fs";
+import path from "path";
 
 const dbPath = process.env.SQLITE_PATH || "./data/webhookgate.sqlite";
+
+// ensure ./data exists
+fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+
 const db = new Database(dbPath);
 
 // WAL helps reliability under concurrent access
@@ -25,8 +31,8 @@ export function tryMarkReceived(provider, eventId) {
     stmt.run(provider, eventId, Date.now());
     return { firstTime: true };
   } catch (err) {
-    // SQLITE_CONSTRAINT_PRIMARYKEY means it's a duplicate
-    if (String(err && err.code) === "SQLITE_CONSTRAINT_PRIMARYKEY") {
+    const code = String(err && err.code);
+    if (code.startsWith("SQLITE_CONSTRAINT")) {
       return { firstTime: false };
     }
     throw err;

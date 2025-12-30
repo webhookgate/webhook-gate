@@ -17,12 +17,20 @@ app.post("/ingest", (req, res) => {
   const eventId = String(req.body?.eventId || "");
 
   if (!provider || !eventId) {
-    return res.status(400).json({ ok: false, error: "provider and eventId are required" });
+    return res
+      .status(400)
+      .json({ ok: false, error: "provider and eventId are required" });
   }
 
   const { firstTime } = tryMarkReceived(provider, eventId);
 
-  // If duplicate, we still return 200 to stop retry storms.
+  if (!firstTime) {
+    console.log(`[dedupe] ${provider} ${eventId}`);
+  } else {
+    console.log(`[accept] ${provider} ${eventId}`);
+  }
+
+  // Always return 200 to stop retries
   return res.status(200).json({ ok: true, firstTime });
 });
 
