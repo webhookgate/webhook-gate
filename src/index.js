@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import { PORT, TARGET_URL, RETRY_INTERVAL_MS, DELIVER_TIMEOUT_MS } from "./config.js";
 import {
@@ -20,7 +21,7 @@ function withTimeout(ms) {
 }
 
 async function deliverOne({ provider, eventId, targetUrl, payload }) {
-  const key = `${provider}:${eventId}`;
+  const key = `${provider}:${eventId}:${targetUrl}`;
 
   const { signal, cancel } = withTimeout(DELIVER_TIMEOUT_MS);
   try {
@@ -41,11 +42,11 @@ async function deliverOne({ provider, eventId, targetUrl, payload }) {
       throw new Error(`downstream ${resp.status} ${resp.statusText} ${text}`.trim());
     }
 
-    markDelivered(provider, eventId);
+    markDelivered(provider, eventId, targetUrl);
     console.log(`[deliver-ok] ${key}`);
     return true;
   } catch (err) {
-    markAttemptFailed(provider, eventId, err?.message || String(err));
+    markAttemptFailed(provider, eventId, targetUrl, err?.message || String(err));
     console.log(`[deliver-fail] ${key} ${err?.message || String(err)}`);
     return false;
   } finally {
