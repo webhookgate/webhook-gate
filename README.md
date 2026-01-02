@@ -55,10 +55,20 @@ WebhookGate will never risk double-charging, double-emailing, or double-writing.
 
 ---
 
+## Install
+
+```bash
+npm install webhookgate-sdk
+```
+
+The SDK automatically creates the required idempotency tables on first use.
+
+---
+
 ## What the developer writes (locked API)
 
 ```js
-import { idempotent } from "./src/idempotent.js";
+import { idempotent } from "webhookgate-sdk";
 
 app.post(
   "/webhooks/stripe",
