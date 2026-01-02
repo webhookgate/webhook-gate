@@ -1,6 +1,12 @@
 import "dotenv/config";
 import express from "express";
-import { PORT, TARGET_URL, RETRY_INTERVAL_MS, DELIVER_TIMEOUT_MS } from "./config.js";
+import {
+  PORT,
+  TARGET_URL,
+  RETRY_INTERVAL_MS,
+  DELIVER_TIMEOUT_MS,
+  INGEST_TOKEN,
+} from "./config.js";
 import {
   tryMarkReceived,
   upsertDelivery,
@@ -38,13 +44,14 @@ async function deliverOne({ provider, eventId, targetUrl, payload }) {
     });
 
     if (!resp.ok) {
-      const text = await resp.text().catch(() => "");
-      throw new Error(`downstream ${resp.status} ${resp.statusText} ${text}`.trim());
+      // Semantic failure in consumer; do NOT retry.
+      console.log(`[downstream-non2xx] ${key} ${resp.status} ${resp.statusText}`);
     }
 
     markDelivered(provider, eventId, targetUrl);
     console.log(`[deliver-ok] ${key}`);
     return true;
+
   } catch (err) {
     markAttemptFailed(provider, eventId, targetUrl, err?.message || String(err));
     console.log(`[deliver-fail] ${key} ${err?.message || String(err)}`);
@@ -60,9 +67,17 @@ app.post("/ingest", async (req, res) => {
   const eventId = String(req.body?.eventId || "");
   const payload = req.body?.payload;
 
+  if (INGEST_TOKEN) {
+    const t = String(req.get("X-WebhookGate-Token") || "");
+    if (t !== INGEST_TOKEN) {
+      return res.status(401).json({ ok: false, error: "Unauthorized" });
+    }
+  }
+
   if (!provider || !eventId) {
     return res.status(400).json({ ok: false, error: "provider and eventId are required" });
   }
+
   if (!TARGET_URL) {
     return res.status(500).json({ ok: false, error: "TARGET_URL is not set" });
   }

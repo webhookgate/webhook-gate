@@ -14,3 +14,5 @@ export const RETRY_INTERVAL_MS = process.env.RETRY_INTERVAL_MS
 export const DELIVER_TIMEOUT_MS = process.env.DELIVER_TIMEOUT_MS
   ? Number(process.env.DELIVER_TIMEOUT_MS)
   : 5000;
+
+export const INGEST_TOKEN = process.env.INGEST_TOKEN || "";
