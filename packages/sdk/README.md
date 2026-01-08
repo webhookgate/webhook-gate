@@ -8,7 +8,25 @@ It does this by combining:
 - **durable webhook intake and de-duplication** at the gateway layer, and
 - a **consumer-side idempotency SDK** that makes duplicate side effects **structurally impossible** within the consumer.
 
-WebhookGate sits in front of webhook consumers and ensures that each `(provider, eventId)` is **accepted exactly once**, even under retries, replays, or noisy providers - and that downstream effects are never duplicated when the consumer uses the SDK.
+WebhookGate sits in front of webhook consumers and ensures that each `(provider, eventId)` is **accepted exactly once**, even under retries, replays, or noisy providers — and ensures downstream effects are never duplicated when the consumer uses the SDK.
+
+---
+
+## Documentation (problem-first)
+
+If you want to understand *why* WebhookGate exists — not just how to use it — these documents explain the underlying failure modes and constraints:
+
+- **Why Webhook Retries Cause Duplicate Side Effects**  
+  https://webhookgate.com/docs/why-retries-cause-duplicates
+
+- **Exactly-once Delivery Is a Myth**  
+  https://webhookgate.com/docs/exactly-once-is-a-myth
+
+- **What a Real Guarantee Requires**  
+  https://webhookgate.com/docs/what-a-real-guarantee-requires
+
+These explain the distributed-systems constraints that make ad-hoc idempotency fragile,
+and the architectural boundaries required to make duplicate side effects impossible.
 
 ---
 
@@ -112,4 +130,6 @@ Crash test:
 
 WebhookGate adds durable intake, replay protection, and operational safeguards for environments where local correctness is no longer sufficient.
 
-Learn more at https://webhookgate.com
+Learn more:
+- Overview: https://webhookgate.com
+- Technical docs: https://webhookgate.com/docs
