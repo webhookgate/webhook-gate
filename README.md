@@ -2,6 +2,8 @@
 
 WebhookGate guarantees **no duplicate webhook side effects**.
 
+https://webhookgate.com
+
 It does this by combining:
 - **durable webhook intake and de-duplication** at the gateway layer, and
 - a **consumer-side idempotency SDK** that makes duplicate side effects **structurally impossible** within the consumer.
@@ -103,3 +105,11 @@ Crash test:
 - Re-run chaos
 - Restart consumer
 - Charges still = 1
+
+---
+
+## When you need production-grade durability
+
+WebhookGate adds durable intake, replay protection, and operational safeguards for environments where local correctness is no longer sufficient.
+
+Learn more at https://webhookgate.com
