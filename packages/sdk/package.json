@@ -1,11 +1,25 @@
 {
   "name": "webhookgate-sdk",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "type": "module",
   "main": "index.js",
   "exports": {
     ".": "./index.js"
   },
+  "keywords": [
+    "webhook",
+    "webhooks",
+    "idempotency",
+    "at-most-once",
+    "side-effects",
+    "duplicate-prevention",
+    "stripe-webhooks",
+    "shopify-webhooks",
+    "sdk",
+    "middleware",
+    "handler",
+    "reliability"
+  ],
   "license": "ISC",
   "dependencies": {
     "pg": "^8.16.3"

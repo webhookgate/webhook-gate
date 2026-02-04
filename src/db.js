@@ -38,6 +38,19 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_deliveries_status_updated
     ON deliveries(status, updated_at);
+
+  CREATE TABLE IF NOT EXISTS api_keys (
+    id           TEXT PRIMARY KEY,
+    key_hash     TEXT NOT NULL UNIQUE,
+    label        TEXT,
+    plan         TEXT NOT NULL DEFAULT 'starter',
+    is_active    INTEGER NOT NULL DEFAULT 1,
+    created_at   INTEGER NOT NULL,
+    last_used_at INTEGER
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_api_keys_active
+    ON api_keys(is_active);
 `);
 
 export function tryMarkReceived(provider, eventId) {
@@ -105,4 +118,33 @@ export function markAttemptFailed(provider, eventId, targetUrl, message) {
     WHERE provider=? AND event_id=? AND target_url=? AND status='pending'
   `);
   stmt.run(String(message || "unknown error"), MAX, now, provider, eventId, targetUrl);
+}
+
+export function insertApiKey({ id, keyHash, label = "", plan = "starter" }) {
+  const now = Date.now();
+  const stmt = db.prepare(`
+    INSERT INTO api_keys (id, key_hash, label, plan, is_active, created_at)
+    VALUES (?, ?, ?, ?, 1, ?)
+  `);
+  stmt.run(id, keyHash, label, plan, now);
+}
+
+export function findActiveApiKeyByHash(keyHash) {
+  const stmt = db.prepare(`
+    SELECT id, plan, is_active
+    FROM api_keys
+    WHERE key_hash = ? AND is_active = 1
+    LIMIT 1
+  `);
+  return stmt.get(keyHash) || null;
+}
+
+export function touchApiKeyLastUsed(id) {
+  const now = Date.now();
+  const stmt = db.prepare(`
+    UPDATE api_keys
+    SET last_used_at = ?
+    WHERE id = ?
+  `);
+  stmt.run(now, id);
 }

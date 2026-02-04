@@ -7,13 +7,29 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "consumer": "node src/consumer-demo.js",
-    "chaos": "node scripts/chaos.js"
+    "chaos": "node scripts/chaos.js",
+    "create:key": "node scripts/create-api-key.js"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/webhookgate/webhook-gate.git"
   },
-  "keywords": [],
+  "keywords": [
+    "webhook",
+    "webhooks",
+    "idempotency",
+    "exactly-once",
+    "at-most-once",
+    "side-effects",
+    "duplicate-prevention",
+    "stripe-webhooks",
+    "shopify-webhooks",
+    "payments",
+    "distributed-systems",
+    "reliability",
+    "gateway",
+    "enforcement"
+  ],
   "author": "",
   "license": "ISC",
   "bugs": {

@@ -15,3 +15,5 @@ export const INGEST_TOKEN = process.env.INGEST_TOKEN || "";
 
 export const MODE = (process.env.WEBHOOKGATE_MODE || "observe").toLowerCase(); // "observe" | "enforce"
 export const LICENSE_KEY = (process.env.WEBHOOKGATE_LICENSE_KEY || "").trim();
+
+export const ENFORCEMENT_API_KEY_HEADER = (process.env.ENFORCEMENT_API_KEY_HEADER || "X-WebhookGate-Key").trim();

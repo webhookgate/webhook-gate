@@ -7,7 +7,7 @@ import {
   DELIVER_TIMEOUT_MS,
   INGEST_TOKEN,
   MODE,
-  LICENSE_KEY,
+  ENFORCEMENT_API_KEY_HEADER,
 } from "./config.js";
 import {
   tryMarkReceived,
@@ -15,10 +15,13 @@ import {
   getPendingDeliveries,
   markDelivered,
   markAttemptFailed,
+  findActiveApiKeyByHash,
+  touchApiKeyLastUsed,
 } from "./db.js";
+import crypto from "crypto";
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 
 app.get("/health", (_, res) => res.json({ ok: true }));
 
@@ -26,10 +29,40 @@ function isEnforceMode() {
   return MODE === "enforce";
 }
 
-function hasValidLicense() {
-  // Minimal v1: any non-empty key enables enforcement.
-  // Later: verify signature / call license server / etc.
-  return Boolean(LICENSE_KEY);
+function getPresentedApiKey(req) {
+  const v = req.get(ENFORCEMENT_API_KEY_HEADER) || req.get("Authorization") || "";
+  // Support either:
+  // - X-WebhookGate-Key: wgk_...
+  // - Authorization: Bearer wgk_...
+  const s = String(v).trim();
+  if (!s) return "";
+  if (s.toLowerCase().startsWith("bearer ")) return s.slice(7).trim();
+  return s;
+}
+
+function hashApiKey(k) {
+  return crypto.createHash("sha256").update(String(k)).digest("hex");
+}
+
+function requireEnforcementApiKey(req, res) {
+  const presented = getPresentedApiKey(req);
+  if (!presented) {
+    res.status(401).json({ ok: false, error: "Missing API key" });
+    return null;
+  }
+
+  const row = findActiveApiKeyByHash(hashApiKey(presented));
+  if (!row) {
+    res.status(401).json({ ok: false, error: "Invalid or inactive API key" });
+    return null;
+  }
+
+  // best-effort usage marker
+  try {
+    touchApiKeyLastUsed(row.id);
+  } catch (_) {}
+
+  return { ok: true, plan: row.plan, apiKeyId: row.id };
 }
 
 function withTimeout(ms) {
@@ -95,6 +128,12 @@ app.post("/ingest", async (req, res) => {
     return res.status(500).json({ ok: false, error: "TARGET_URL is not set" });
   }
 
+  // FAIL-CLOSED: enforcement requires a valid API key
+  if (isEnforceMode()) {
+    const gate = requireEnforcementApiKey(req, res);
+    if (!gate || gate.ok !== true) return; // response already sent
+  }
+
   let firstTime = false;
   let receiptKnown = true;
 
@@ -116,12 +155,6 @@ app.post("/ingest", async (req, res) => {
       `[observe] receipt tracking failed, forwarding anyway ${provider} ${eventId} ${err?.message || String(err)}`
     );
     firstTime = true;
-  }
-
-  // FAIL-CLOSED: enforcement requires a license
-  if (isEnforceMode() && !hasValidLicense()) {
-    console.log(`[block] enforcement mode requires license ${provider} ${eventId}`);
-    return res.status(402).json({ ok: false, error: "License required for enforcement mode" });
   }
 
   // Behavior split:
@@ -161,12 +194,6 @@ async function drainOnce() {
   draining = true;
 
   try {
-    // FAIL-CLOSED: don’t deliver pending jobs if enforcement mode is selected but not licensed
-    if (isEnforceMode() && !hasValidLicense()) {
-      console.log("[block] enforcement mode requires license (drain loop)");
-      return;
-    }
-
     const jobs = getPendingDeliveries(25);
     for (const j of jobs) {
       const payload = JSON.parse(j.payloadJson);
@@ -183,6 +210,6 @@ setInterval(() => {
 
 app.listen(PORT, () => {
   console.log(
-    `WebhookGate listening on ${PORT} mode=${isEnforceMode() ? "enforce" : "observe"} license=${hasValidLicense() ? "present" : "missing"}`
+    `WebhookGate listening on ${PORT} mode=${isEnforceMode() ? "enforce" : "observe"}`
   );
 });
