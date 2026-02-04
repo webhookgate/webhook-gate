@@ -6,6 +6,8 @@ import {
   RETRY_INTERVAL_MS,
   DELIVER_TIMEOUT_MS,
   INGEST_TOKEN,
+  MODE,
+  LICENSE_KEY,
 } from "./config.js";
 import {
   tryMarkReceived,
@@ -19,6 +21,16 @@ const app = express();
 app.use(express.json());
 
 app.get("/health", (_, res) => res.json({ ok: true }));
+
+function isEnforceMode() {
+  return MODE === "enforce";
+}
+
+function hasValidLicense() {
+  // Minimal v1: any non-empty key enables enforcement.
+  // Later: verify signature / call license server / etc.
+  return Boolean(LICENSE_KEY);
+}
 
 function withTimeout(ms) {
   const controller = new AbortController();
@@ -44,8 +56,9 @@ async function deliverOne({ provider, eventId, targetUrl, payload }) {
     });
 
     if (!resp.ok) {
-      // Semantic failure in consumer; do NOT retry.
       console.log(`[downstream-non2xx] ${key} ${resp.status} ${resp.statusText}`);
+      markAttemptFailed(provider, eventId, targetUrl, `${resp.status} ${resp.statusText}`);
+      return false;
     }
 
     markDelivered(provider, eventId, targetUrl);
@@ -82,14 +95,48 @@ app.post("/ingest", async (req, res) => {
     return res.status(500).json({ ok: false, error: "TARGET_URL is not set" });
   }
 
-  const { firstTime } = tryMarkReceived(provider, eventId);
+  let firstTime = false;
+  let receiptKnown = true;
 
-  if (!firstTime) {
-    console.log(`[dedupe] ${provider} ${eventId}`);
-    return res.status(200).json({ ok: true, firstTime: false });
+  try {
+    ({ firstTime } = tryMarkReceived(provider, eventId));
+  } catch (err) {
+    receiptKnown = false;
+
+    // FAIL-CLOSED: if we cannot verify state in enforcement mode, do not forward.
+    if (isEnforceMode()) {
+      console.log(
+        `[block] cannot verify receipt state (enforcement mode) ${provider} ${eventId} ${err?.message || String(err)}`
+      );
+      return res.status(503).json({ ok: false, error: "Invariant unverifiable (receipt store unavailable)" });
+    }
+
+    // OBSERVE MODE: best-effort; still forward even if receipt tracking fails
+    console.log(
+      `[observe] receipt tracking failed, forwarding anyway ${provider} ${eventId} ${err?.message || String(err)}`
+    );
+    firstTime = true;
   }
 
-  console.log(`[accept] ${provider} ${eventId}`);
+  // FAIL-CLOSED: enforcement requires a license
+  if (isEnforceMode() && !hasValidLicense()) {
+    console.log(`[block] enforcement mode requires license ${provider} ${eventId}`);
+    return res.status(402).json({ ok: false, error: "License required for enforcement mode" });
+  }
+
+  // Behavior split:
+  if (!firstTime) {
+    if (isEnforceMode()) {
+      // ENFORCEMENT: block duplicates (current behavior)
+      console.log(`[dedupe] ${provider} ${eventId}`);
+      return res.status(200).json({ ok: true, firstTime: false, mode: "enforce", blocked: true });
+    } else {
+      // OBSERVATIONAL: allow duplicates through, but log clearly
+      console.log(`[observe-dup] ${provider} ${eventId} side effects may execute again`);
+    }
+  } else {
+    console.log(`[accept] ${provider} ${eventId}`);
+  }
 
   // Store delivery job durably so retries are possible
   upsertDelivery({ provider, eventId, targetUrl: TARGET_URL, payload });
@@ -98,7 +145,13 @@ app.post("/ingest", async (req, res) => {
   const delivered = await deliverOne({ provider, eventId, targetUrl: TARGET_URL, payload });
 
   // Even if not delivered yet, we return 200 to stop webhook retry storms.
-  return res.status(200).json({ ok: true, firstTime: true, delivered });
+  return res.status(200).json({
+    ok: true,
+    firstTime,
+    receiptKnown,
+    delivered,
+    mode: isEnforceMode() ? "enforce" : "observe",
+  });
 });
 
 // Simple in-process retry loop (MVP)
@@ -108,6 +161,12 @@ async function drainOnce() {
   draining = true;
 
   try {
+    // FAIL-CLOSED: don’t deliver pending jobs if enforcement mode is selected but not licensed
+    if (isEnforceMode() && !hasValidLicense()) {
+      console.log("[block] enforcement mode requires license (drain loop)");
+      return;
+    }
+
     const jobs = getPendingDeliveries(25);
     for (const j of jobs) {
       const payload = JSON.parse(j.payloadJson);
@@ -123,5 +182,7 @@ setInterval(() => {
 }, RETRY_INTERVAL_MS);
 
 app.listen(PORT, () => {
-  console.log(`WebhookGate listening on ${PORT}`);
+  console.log(
+    `WebhookGate listening on ${PORT} mode=${isEnforceMode() ? "enforce" : "observe"} license=${hasValidLicense() ? "present" : "missing"}`
+  );
 });
